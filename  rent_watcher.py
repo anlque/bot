@@ -2,26 +2,26 @@ import os, re
 from urllib.parse import quote
 from dotenv import load_dotenv
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
 load_dotenv()
 
 API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
 API_HASH = os.getenv("TELEGRAM_API_HASH", "")
+SESSION = os.getenv("TELEGRAM_SESSION", "")
 CHANNELS = [c.strip() for c in os.getenv("CHANNELS", "").split(",") if c.strip()]
 MAX_RENT_GEL = int(os.getenv("MAX_RENT_GEL", "0"))
 AREAS = {a.strip().lower() for a in os.getenv("AREAS", "").split(",") if a.strip()}
 STREETS = {s.strip().lower() for s in os.getenv("STREETS", "").split(",") if s.strip()}
 FORWARD_TO = os.getenv("FORWARD_TO", "me").strip() or "me"
+USD_TO_GEL = float(os.getenv("USD_TO_GEL", "0"))
 
 if not API_ID or not API_HASH or not CHANNELS:
-    raise SystemExit("Заполните TELEGRAM_API_ID, TELEGRAM_API_HASH и CHANNELS в .env")
+    raise SystemExit("Fill TELEGRAM_API_ID, TELEGRAM_API_HASH & CHANNELS in .env")
 
-PRICE_RE = re.compile(
-    r'(?<!\d)(\d[\d\s,\.]{1,})(?:\s*(₾|gel|lari|лари|\$|usd))?',
-    re.IGNORECASE,
-)
+client = TelegramClient(StringSession(SESSION), API_ID, API_HASH) if SESSION else TelegramClient("rent_session", API_ID, API_HASH)
 
-USD_TO_GEL = float(os.getenv("USD_TO_GEL", "0"))
+PRICE_RE = re.compile(r'(?<!\d)(\d[\d\s,\.]{1,})(?:\s*(₾|gel|lari|лари|\$|usd))?', re.IGNORECASE)
 
 def parse_price_gel(text: str) -> int | None:
     m = PRICE_RE.search(text)
@@ -32,7 +32,6 @@ def parse_price_gel(text: str) -> int | None:
     if not digits:
         return None
     val = int(digits)
-
     if val < 50 or val > 200_000:
         return None
     unit = (unit or "gel").lower()
@@ -49,8 +48,6 @@ def has_location_match(text: str) -> bool:
 
 def build_post_link(username: str, msg_id: int) -> str:
     return f"https://t.me/{quote(username.strip('@'))}/{msg_id}"
-
-client = TelegramClient("rent_session", API_ID, API_HASH)
 
 @client.on(events.NewMessage(chats=CHANNELS))
 async def on_new_post(event):
@@ -72,7 +69,7 @@ async def on_new_post(event):
         except Exception:
             pass
 
-        lines = ["✅ Нашёл подходящее объявление"]
+        lines = ["✅ Найдена подходящая аренда"]
         if price_gel is not None:
             lines.append(f"Цена≈ {price_gel} GEL (порог {MAX_RENT_GEL} GEL)")
         if AREAS or STREETS:
